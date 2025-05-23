@@ -14,9 +14,13 @@
 // See https://forum.openmarine.net/showthread.php?tid=4617 for
 //		the optoisolated circuit used as basis for my schematic.
 
-
 #include <myDebug.h>	// https://github.com/phorton1/Arduino-libraries-myDebug
 #include "SeaTalk.h"
+
+#define ALIVE_LED		13
+#define ALIVE_OFF_TIME	980
+#define ALIVE_ON_TIME	20
+
 
 bool show_input 		= 0;	// set to 1 to call showDatagram() on incoming datagrams
 bool show_every_char 	= 0;	// set to one to see every incoming seatalk character
@@ -27,6 +31,11 @@ uint32_t last_rcv_time = 0;		// ms time of last received seatalk byte
 
 void setup()
 {
+	#if ALIVE_LED
+		pinMode(ALIVE_LED,OUTPUT);
+		digitalWrite(ALIVE_LED,1);
+	#endif
+
 	Serial.begin(115200);
 
 	display(0,"SeaTalk.ino setup() started",0);
@@ -38,12 +47,29 @@ void setup()
 		// work with inverted signal (different circuit).
 
 	display(0,"SeaTalk.ino setup() completed",0);
+
+	#if ALIVE_LED
+		digitalWrite(ALIVE_LED,0);
+	#endif
 }
 
 
 
 void loop()
 {
+	#if ALIVE_LED
+		static bool alive_on = 0;
+		static uint32_t last_alive_time = 0;
+		uint32_t alive_now = millis();
+		uint32_t alive_delay = alive_on ? ALIVE_ON_TIME : ALIVE_OFF_TIME;
+		if (alive_now - last_alive_time >= alive_delay)
+		{
+			alive_on = !alive_on;
+			digitalWrite(ALIVE_LED,alive_on);
+			last_alive_time = alive_now;
+		}
+	#endif
+
 	// handle commands/simulation, etc
 
 	process();
