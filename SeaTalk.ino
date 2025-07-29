@@ -4,11 +4,13 @@
 // Communicate with E80 via SeaTalk and Teensy 4.0.
 // The teensy 4.0 is a logical choice for a Seatalk device, as it
 // 		natively supports 9 bits in hardware UARTS.
+//
 // C:\Program Files (x86)\Arduino\hardware\teensy\avr\cores\teensy4\HardwareSerial.h
 //		modified as administrator to uncomment #define SERIAL_9BIT_SUPPORT near top
 //
 // See /docs/readme.md for more information.
-// See /docs/kicad/breadboard for the schematic
+// See /docs/kicad/breadboard for the test circuit
+// See /docs/kicad/seatalk for the installed PCB
 // See http://www.thomasknauf.de/seatalk.htm, with thanks, for
 //		Seatalk technical info
 // See https://forum.openmarine.net/showthread.php?tid=4617 for
@@ -39,6 +41,7 @@ void setup()
 	Serial.begin(115200);
 
 	display(0,"SeaTalk.ino setup() started",0);
+	delay(1000);
 
 	SEATALK_PORT.begin(4800, SERIAL_9N1);
 		// Requires #define SERIAL_9BIT_SUPPORT in HardwareSerial.h

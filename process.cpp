@@ -21,6 +21,7 @@
 #define SEND_DELAY				20		// ms between each datagram
 #define NUM_RETRIES				5
 
+#define PIN_PULSE				11
 
 typedef struct
 {
@@ -64,6 +65,10 @@ static float heading;		// 0-359.9
 
 static int waypoint_num;	// 0..NUM_WAYPOINTS-1
 
+static int pulse_ms;
+static bool pulse_out;
+static uint32_t last_pulse;
+
 
 // state variables
 
@@ -98,7 +103,7 @@ static void usage()
 	display(0,"sN, s+N, s-N = set/increment/decrement speed",0);
 	display(0,"jN, j+N, j-N = jump to waypoint; next waypoint, prev waypoint",0);
 	display(0,"wN, w+N, w-N = set heading to waypoint; next waypoint, prev waypoint",0);
-
+	display(0,"gN, g+N, g-N = set ms between pulses to speed log test",0);
 	proc_leave();
 }
 
@@ -138,6 +143,12 @@ static void init_sim()
 {
 	display(0,"INITIALIZE SIMULATOR",0);
 
+	pulse_ms = 100;
+	pulse_out = 0;
+	pinMode(PIN_PULSE,OUTPUT);
+	digitalWrite(PIN_PULSE,pulse_out);
+
+	
 	depth = 10;
 	rpm = 0;
 	wind_angle = 90;
@@ -405,6 +416,20 @@ void handleCommand(int command, char *buf)
 			wp->lat,
 			wp->lon);
 	}
+	else if (command == 'g')
+	{
+		if (inc)
+			pulse_ms += (inc * val);
+		else
+			pulse_ms = val;
+		if (pulse_ms > 10000)
+			pulse_ms = 10000;
+		if (pulse_ms < 0)
+			pulse_ms = 0;
+
+		display(0,"pulse <= %d MS",pulse_ms);
+	}
+
 }
 
 
@@ -418,9 +443,24 @@ void process()
 		usage();
 	}
 
+	uint32_t now = millis();
+
+	if (pulse_out && !pulse_ms)
+	{
+		pulse_out = 0;
+		digitalWrite(PIN_PULSE,pulse_out);
+		last_pulse = now;
+	}
+	else if (pulse_ms && now - last_pulse > pulse_ms)
+	{
+		last_pulse = now;
+		pulse_out = !pulse_out;
+		digitalWrite(PIN_PULSE,pulse_out);
+	}
+
+
 	if (running)
 	{
-		uint32_t now = millis();
 		uint32_t diff = now - last_send_time;
 		if ((!dg_num && (diff > SEND_INTERVAL)) ||
 			 (dg_num && (diff > SEND_DELAY)))
@@ -525,7 +565,7 @@ void process()
 			display(0,"SHOW OUTPUT(%d)",show_output);
 		}
 
-		else if (c == 'h' || c == 's' || c == 'w' || c == 'j')
+		else if (c == 'h' || c == 's' || c == 'w' || c == 'j' || c == 'g')
 		{
 			in_command = c;
 		}
