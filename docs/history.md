@@ -126,15 +126,15 @@ After much messing around and very little joy trying with ESP32 to
 
 
 
-### ST50 Speed/Log tests (hacks)
+## ST50 Speed/Log tests (hacks)
 
 MY FACING ST50 SPEED INSTRUMENT (male) PLUG, clockwise from top.
 This is presumably the opposite of the paddle wheel sensor pinout.
 
-- 1 - blue	TEMP2
+- 1 - blue	    TEMP2
 - 2 - yellow	TEMP1
-- 3 - green	LOG PULSE
-- 4 - black	GROUND (2nd to left)
+- 3 - green		LOG PULSE
+- 4 - black		GROUND (2nd to left)
 - 5 - red		5V
 
 Tested the log pulse by touching wires (pin3 to ground) and it showed a speed.
@@ -156,3 +156,30 @@ Speed appears too be tenth of knots as 16 bits:
 I get default datagram 23 21 f6 0e.
 FWIW the ST50 head does not show temperature so thus far I
 have not tested this.
+
+
+## ST50 Wind Instruments tests (hacks)
+
+I did not strip the wires from the ST50 Wind Head Unit,
+and my analysis does NOT agree with the published spec,
+but my testing works.
+
+MY FACING THE INSTRMENT CONNECTOR, notch up
+
+- 1 - red		- 8V
+- 2 - black		- GROUND (2nd to right)
+- 3 - green		- SINE - 2 to 6v
+- 4 - blue	    - COSINE 2 to 6v
+- 5 - yellow	- PULSE 0 to 5V
+
+GREEN	BLUE	READING		DATAGRAM			DECIMAL		/2 = DEGREES RIGHT OF BOW
+
+3.23v	6.65v	110 deg		10 11 01 f4-fa		fa=506		253
+2.82v	4.06v	142 deg		10 11 01 1a			282			141
+2.78v   3.75v	52 deg		10 11 00 68			104			52
+2.19V	3.23V	18 deg 		10 11 00 22         36			18
+
+As far as the wind speed goes, at 100ms pulses, I get datagrams
+
+- 100ms 11 11 07 06 = 7.6 knots
+- 25ms  11 11 1b 02 = 27.2 knots
