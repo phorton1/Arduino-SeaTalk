@@ -17,9 +17,9 @@
 #define SEND_ERROR		3
 
 #define SEND_INTERVAL 			1000	// ms between sending update to E80
-#define IDLE_BUS_MS				5		// ms bus must be idle to send next datagram
-#define SEND_DELAY				20		// ms between each datagram
-#define NUM_RETRIES				5
+#define IDLE_BUS_MS				10		// ms bus must be idle to send next datagram
+#define SEND_DELAY				50		// ms between each datagram
+#define NUM_RETRIES				6
 
 #define PIN_PULSE				11
 
@@ -91,7 +91,7 @@ static void usage()
 	display(0,"STATE: waypoint(%d) heading(%0.1f) speed(%0.1f) show input(%d) output(%d)",
 		waypoint_num,cog,sog,show_input,show_output);
 	
-	display(0,"USAGE",0);
+	display(0,"Seatalk USAGE",0);
 	proc_entry();
 
 	display(0,"? = show this help",0);
@@ -215,14 +215,13 @@ void setHeadingToWaypoint(const waypoint_t *waypoint)
 
 const uint16_t *getDatagram(int num)
 {
-	if (num == 11)
+	if (num == 12)
 		return 0;
 	static uint16_t dg[20];
 	memset(dg,0,20*2);
 	switch (num)
 	{
 		case 0: stRPM(dg, rpm);	                    break;
-			// stDepth(dg, depth);					break;
 		case 1: stRPM(dg, rpm);	                    break;
 		case 2: stWindAngle(dg, app_wind_angle);	break;
 		case 3: stWindSpeed(dg, app_wind_speed);	break;
@@ -233,6 +232,7 @@ const uint16_t *getDatagram(int num)
 		case 8: stDate(dg);							break;
 		case 9: stLatLon(dg, latitude, longitude);	break;
 		case 10: stHeading(dg, heading);	        break;
+		case 11: stDepth(dg, depth);				break;
 	}
 	return dg;
 }
@@ -282,7 +282,7 @@ int sendDatagram(const uint16_t *dg)
 				{
 					if (show_output)
 						Serial.println();
-					warning(0,"collision",0);
+					warning(0,"collision(%d)",retry_num);
 					return SEND_COLLISION;
 				}
 			}
@@ -486,6 +486,7 @@ void process()
 					if (retry_num >= NUM_RETRIES)
 					{
 						my_error("BUS CONGESTED; could not send datagram(%d)",dg_num);
+						retry_num = 0;
 						stop_sim();
 					}
 					// otherwise, try again later

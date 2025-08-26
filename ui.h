@@ -24,7 +24,7 @@
 
 	const uint16_t recorded_datagrams[][10] =
 		// A series of datagrams recorded from
-		// the E80 in Simulation mode.  They are then
+		// the E80 in Simulation mode.  They were then
 		// sent back to the E80 as proof of concept.
 	{
 		{0x126, 0x04, 0xc2, 0x09, 0x00, 0x00, 0x10},
