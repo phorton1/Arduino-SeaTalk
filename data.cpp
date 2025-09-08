@@ -8,6 +8,12 @@
 
 int dbg_data = 1;
 
+extern int loop_counter;
+extern uint32_t time_init;
+extern int time_year;
+extern int time_month;
+extern int time_day;
+
 
 void stDepth(uint16_t *dg, float depth)
 {
@@ -130,7 +136,12 @@ void stCOG(uint16_t *dg, float degrees)
 
 void stTime(uint16_t *dg)	// GMT
 {
-	int secs = 12*3600 + millis()/1000;
+	uint32_t elapsed = millis() - time_init;
+	int hour_counter = (loop_counter / 10) % 24;
+		// every 10 seconds we increment the hour
+		// to help find all time bytes in raynet.pm
+
+	int secs = elapsed/1000  + hour_counter * 3600;
 	int hour = secs / 3600;
 	int minute = (secs - hour * 3600) / 60;
 	secs = secs % 60;
@@ -138,28 +149,35 @@ void stTime(uint16_t *dg)	// GMT
 	if (hour > 23)
 		hour = 0;
 
-	uint16_t RST = (minute << 6) | secs;
+	// RST is 12 bits (6 bits for minute, 6 bits for second)
+	// T is four bits (low order four bits of second)
+	// RS is eight bits (6 bits of minute followed by 2 bits of second)
 
-	display(dbg_data,"stTime(%02d:%02d:%02d)",hour,minute,secs);
+	uint16_t RST = (minute << 6) | secs;
+	uint16_t T = RST & 0xf;
+	uint16_t RS = RST >> 4;
 
 	dg[0] = ST_TIME;
-	dg[1] = 0x01 | ((RST & 0x3) << 4);
-	dg[2] = RST >> 2;
+	dg[1] = 0x01 | (T << 4);
+	dg[2] = RS;
 	dg[3] = hour;
 }
 
 
 void stDate(uint16_t *dg)
 {
-	int year = 25;
-	int month = 5;
-	int day = 10;
+	int year = time_year;
+	int month = time_month;
+	int day = time_day;
 
 	display(dbg_data,"stDate(%02d/%02d/%02d)",month,day,year);
 	dg[0] = ST_DATE;
 	dg[1] = 0x01 | (month << 4);
 	dg[2] = day;
 	dg[3] = year;
+
+	// if (loop_counter && loop_counter % 10 == 0)
+	//	time_day = time_day == 1 ? 2 : 1;
 
 }
 

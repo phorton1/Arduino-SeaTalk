@@ -49,8 +49,18 @@ const int NUM_WAYPOINTS = 9;
 
 // UI variables
 
-static bool running = 0;
+static int running = 0;
+	// defines number of messages to send
+	// hopefully the order is somewhat meaningful
+
 static bool show_output = 0;
+
+int loop_counter = 0;
+uint32_t time_init = 0;
+int time_year = 0;
+int time_month = 1;
+int time_day = 1;
+
 
 static float depth;			// 0-999.9	depth below transducer
 static int 	 rpm;			// 0-4000	negative = backwards; currently useless
@@ -65,8 +75,8 @@ static float heading;		// 0-359.9
 
 static int waypoint_num;	// 0..NUM_WAYPOINTS-1
 
-static int pulse_ms;
 static bool pulse_out;
+static uint32_t pulse_ms;
 static uint32_t last_pulse;
 
 
@@ -74,7 +84,6 @@ static uint32_t last_pulse;
 
 static bool inited = 0;
 static int dg_num = 0;
-static int retry_num = 0;
 static uint32_t last_send_time = 0;
 static uint32_t last_update_ms = 0;
 
@@ -95,15 +104,20 @@ static void usage()
 	proc_entry();
 
 	display(0,"? = show this help",0);
-	display(0,"x = start/stop simulator",0);
 	display(0,"y = re-initialize simulator",0);
 	display(0,"i = show received datagrams",0);
 	display(0,"o = show sent datagrams",0);
+	display(0,"xN = x0 to stop; xN to send first N datagrams",0);
+
+	display(0,"dN, d+N, d-N = set AND SEND depth",0);
 	display(0,"hN, h+N, h-N = set/increment/decrement heading",0);
 	display(0,"sN, s+N, s-N = set/increment/decrement speed",0);
 	display(0,"jN, j+N, j-N = jump to waypoint; next waypoint, prev waypoint",0);
 	display(0,"wN, w+N, w-N = set heading to waypoint; next waypoint, prev waypoint",0);
 	display(0,"gN, g+N, g-N = set ms between pulses to speed log test",0);
+
+	display(0,"t = send time(00:00:00)",0);
+
 	proc_leave();
 }
 
@@ -138,11 +152,26 @@ void calculateApparentWind()
 
 
 
+const uint16_t *getDatagram(int num);
+int sendDatagram(const uint16_t *dg);
+	// forwards
+
 
 static void init_sim()
 {
 	display(0,"INITIALIZE SIMULATOR",0);
 
+	loop_counter = 0;
+	time_init = millis();
+	time_year = 25;
+	time_month = 9;
+	time_day = 5;
+	if (0)
+	{
+		display(0,"TIME(0)",9);
+		const uint16_t *dg = getDatagram(0);
+		sendDatagram(dg);
+	}
 	pulse_ms = 100;
 	pulse_out = 0;
 	pinMode(PIN_PULSE,OUTPUT);
@@ -163,7 +192,6 @@ static void init_sim()
 	waypoint_num = 0;
 
 	dg_num = 0;
-	retry_num = 0;
 	last_send_time = 0;
 	last_update_ms = 0;
 	inited = true;
@@ -212,27 +240,25 @@ void setHeadingToWaypoint(const waypoint_t *waypoint)
 // sendDatagram
 //--------------------------------------------------
 
+#define NUM_DGS   10
 
 const uint16_t *getDatagram(int num)
 {
-	if (num == 12)
-		return 0;
 	static uint16_t dg[20];
 	memset(dg,0,20*2);
 	switch (num)
 	{
-		case 0: stRPM(dg, rpm);	                    break;
-		case 1: stRPM(dg, rpm);	                    break;
-		case 2: stWindAngle(dg, app_wind_angle);	break;
-		case 3: stWindSpeed(dg, app_wind_speed);	break;
-		case 4: stWaterSpeed(dg, water_speed);		break;
+		case 0: stTime(dg);							break;
+		case 1: stDate(dg);							break;
+		case 2: stHeading(dg, heading);	        	break;
+		case 3: stDepth(dg, depth);					break;
+		case 4: stCOG(dg, cog);	                    break;
 		case 5: stSOG(dg, sog);	                    break;
-		case 6: stCOG(dg, cog);	                    break;
-		case 7: stTime(dg);							break;
-		case 8: stDate(dg);							break;
-		case 9: stLatLon(dg, latitude, longitude);	break;
-		case 10: stHeading(dg, heading);	        break;
-		case 11: stDepth(dg, depth);				break;
+		case 6: stLatLon(dg, latitude, longitude);	break;
+		case 7: stWindAngle(dg, app_wind_angle);	break;
+		case 8: stWindSpeed(dg, app_wind_speed);	break;
+		case 9: stWaterSpeed(dg, water_speed);		break;
+		case 10: stRPM(dg, rpm);	                    break;
 	}
 	return dg;
 }
@@ -250,15 +276,12 @@ int sendDatagram(const uint16_t *dg)
 	{
 		Serial.print("--> [");
 		Serial.print(dg_num);
-		Serial.print(",");
-		Serial.print(retry_num);
 		Serial.print("]");
 	}
 
 	int len = (dg[1] & 0xf) + 3;
 	for (int i=0; i<len; i++)
 	{
-		bool ok = false;
 		int out_byte = dg[i];
 
 		if (show_output)
@@ -267,33 +290,7 @@ int sendDatagram(const uint16_t *dg)
 			Serial.print(out_byte,HEX);
 		}
 
-		uint32_t sent_time = millis();
 		SEATALK_PORT.write9bit(out_byte);
-		while (!ok)
-		{
-			if (SEATALK_PORT.available())
-			{
-				int in_byte = SEATALK_PORT.read();
-				if (in_byte == out_byte)
-				{
-					ok = true;
-				}
-				else
-				{
-					if (show_output)
-						Serial.println();
-					warning(0,"collision(%d)",retry_num);
-					return SEND_COLLISION;
-				}
-			}
-			else if (millis() - sent_time >= WRITE_TIMEOUT)
-			{
-				if (show_output)
-					Serial.println();
-				my_error("WRITE_TIMEOUT",0);
-				return SEND_ERROR;
-			}
-		}
 	}
 
 	if (show_output)
@@ -341,7 +338,19 @@ void handleCommand(int command, char *buf)
 	}
 
 	display(0,"command(%c) inc(%d) val(%d)",command,inc,val);
-	if (command == 'h')
+
+	if (command == 'x')
+	{
+		if (val > NUM_DGS)
+			val = NUM_DGS;
+
+		if (val && !running)
+			start_sim();
+		else if (running && !-val)
+			stop_sim();
+		running = val;
+	}
+	else if (command == 'h')
 	{
 		if (inc)
 			cog += (inc * val);
@@ -416,6 +425,25 @@ void handleCommand(int command, char *buf)
 			wp->lat,
 			wp->lon);
 	}
+	else if (command == 'd')
+	{
+		if (inc)
+			depth += (inc * val);
+		else
+			depth = val;
+
+		if (depth < 0)
+			depth = 0;
+		if (depth > 99)
+			depth = 99;
+
+		display(0,"DEPTH(depth)",depth);
+		const uint16_t *dg = getDatagram(11);
+		sendDatagram(dg);
+
+
+
+	}
 	else if (command == 'g')
 	{
 		if (inc)
@@ -465,49 +493,27 @@ void process()
 		if ((!dg_num && (diff > SEND_INTERVAL)) ||
 			 (dg_num && (diff > SEND_DELAY)))
 		{
-			updatePosition();
-
-			if (show_output && !dg_num && !retry_num)
-				display(0,"----------------START---------------",0);
-
-			const uint16_t *dg = getDatagram(dg_num);
-			if (dg && dg[0])
+			if (!dg_num)
 			{
-				int rslt = sendDatagram(dg);
-				last_send_time = millis();
+				updatePosition();
+				if (show_output)
+					display(0,"----------------START---------------",0);
+			}
 
-				if (rslt == SEND_ERROR)
-				{
-					stop_sim();
-				}
-				else if (rslt == SEND_COLLISION)
-				{
-					retry_num++;
-					if (retry_num >= NUM_RETRIES)
-					{
-						my_error("BUS CONGESTED; could not send datagram(%d)",dg_num);
-						retry_num = 0;
-						stop_sim();
-					}
-					// otherwise, try again later
-				}
-				else if (rslt == SEND_BUSY)
-				{
-					// bus busy, try again later
-				}
-				else // rslt == SEND_OK
-				{
-					dg_num++;
-					retry_num = 0;
-				}
+			if (dg_num < running)
+			{
+				const uint16_t *dg = getDatagram(dg_num);
+				sendDatagram(dg);
+				last_send_time = millis();
+				dg_num++;
 			}
 			else
 			{
 				dg_num = 0;
-				retry_num = 0;
 				last_send_time = millis();
 				if (show_output)
 					display(0,"----------------END-----------------",0);
+				loop_counter++;
 			}
 		}
 	}	// if running
@@ -544,13 +550,6 @@ void process()
 		{
 			usage();
 		}
-		else if (c == 'x')
-		{
-			if (running)
-				stop_sim();
-			else
-				start_sim();
-		}
 		else if (c == 'y')
 		{
 			init_sim();
@@ -565,8 +564,15 @@ void process()
 			show_output = !show_output;
 			display(0,"SHOW OUTPUT(%d)",show_output);
 		}
+		else if (c == 't')
+		{
+			display(0,"TIME(0)",9);
+			time_init = millis();
+			const uint16_t *dg = getDatagram(0);
+			sendDatagram(dg);
+		}
 
-		else if (c == 'h' || c == 's' || c == 'w' || c == 'j' || c == 'g')
+		else if (c == 'h' || c == 's' || c == 'w' || c == 'j' || c == 'g' || c == 'd' || c == 'x')
 		{
 			in_command = c;
 		}
