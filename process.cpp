@@ -294,7 +294,24 @@ int sendDatagram(const uint16_t *dg)
 	}
 
 	if (show_output)
+	{
 		Serial.println();
+
+		// experiment to send a binary packet
+
+		char packet[300];
+
+		packet[0] = 0x02;		// binary indicator
+		packet[1] = 0xff;		// big endian length in two bytees
+		packet[2] = 0x00;
+
+		for (int i=0; i<256; i++)
+		{
+			packet[i+3] = (uint8_t) i;
+		}
+
+		Serial.write(packet,258);
+	}
 	return SEND_OK;
 }
 
